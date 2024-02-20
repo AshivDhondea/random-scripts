@@ -158,6 +158,7 @@ def solve_board(board: List[List[int]]) -> List[List[int]]:
 
     iters = 0
     max_iterations = 6
+    # TODO: Priority: High: handle max iterations.
 
     while iters < max_iterations:
         print(f"Iteration {iters}")
