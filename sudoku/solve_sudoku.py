@@ -145,14 +145,19 @@ def select_square(cell_coordinates: Tuple[int, int], board: List[List[int]]) -> 
 
 
 def solve_board(board: List[List[int]]) -> List[List[int]]:
-    row_possibility_space = dict.fromkeys([rr for rr in range(9)], [])
-    column_possibility_space = dict.fromkeys([cc for cc in range(9)], [])
+    row_possibility_space = dict()
+    column_possibility_space = dict()
+    for k in range(9):
+        row_possibility_space[k] = list()
+        column_possibility_space[k] = list()
 
-    square_possibility_space = dict.fromkeys([(r, c) for r in range(9) for c in range(9)], [])
+    square_possibility_space = dict()
+    for rk in range(9):
+        for ck in range(9):
+            square_possibility_space[rk, ck] = list()
 
     iters = 0
     max_iterations = 6
-    # TODO: Priority: High: re-factor code to handle the maximum iteration depth.
 
     while iters < max_iterations:
         print(f"Iteration {iters}")
