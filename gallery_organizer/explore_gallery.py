@@ -25,7 +25,7 @@ if __name__ == '__main__':
 
     if not os.path.isdir(output_path):
         output_path_error = f"{output_path} is not a valid directory."
-        raise FileNotFoundError(output_path_error)
+        raise NotADirectoryError(output_path_error)
 
     # Get all file paths.
     files: List[str] = [f for f in os.listdir(input_path) if f.endswith(file_type)]
@@ -51,12 +51,14 @@ if __name__ == '__main__':
             date_dict[year][month].append(f)
 
     # Save the gallery dictionary as a json file.
-    json_path = os.path.join(input_path, 'gallery_record.json')
+    json_path = os.path.join(output_path, 'gallery_record.json')
     with open(json_path, 'w') as f:
         json.dump(date_dict, f, indent=4)
 
     # Keep a record of rejected files.
-    rejected_file_path = os.path.join(input_path, 'rejected_files.txt')
+    rejected_file_path = os.path.join(output_path, 'rejected_files.txt')
     with open(rejected_file_path, 'w') as f:
         for rejected in rejected_files:
-            f.write(rejected + '\n')
+            f.write(f"{rejected}\n")
+
+    print(f"Job completed on {input_path}")
