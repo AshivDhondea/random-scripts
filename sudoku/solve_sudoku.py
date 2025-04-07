@@ -1,4 +1,6 @@
-from typing import List, Tuple
+from typing import Dict, List, Tuple
+import argparse
+import copy
 import os
 
 
@@ -65,8 +67,8 @@ def read_puzzle(sudoku_path: str) -> List[List[int]]:
         The sudoku puzzle as a list of rows of integers.
 
     """
-    with open(sudoku_path, 'r') as f:
-        content = f.readlines()
+    with open(sudoku_path, 'r') as file:
+        content = file.readlines()
 
     board = list()
     for line in content:
@@ -144,7 +146,45 @@ def select_square(cell_coordinates: Tuple[int, int], board: List[List[int]]) -> 
     return square_values
 
 
-def solve_board(board: List[List[int]]) -> List[List[int]]:
+def solve_board(board_to_solve: List[List[int]], max_iterations: int) -> List[List[int]]:
+    # Solve the board iteratively.
+    # Combine two approaches:
+    # 1. resolve empty cells if they are the only cell in their row, column or square which can contain a given value.
+    # 2. resolve empty cells if their possibility space contains only one value.
+
+    iters = 0
+    while iters < max_iterations:
+        # Fill in the possibility space for each empty cell.
+        filled_board_space = fill_board_space(board_to_solve)
+        # Resolve empty cells based on unique values in the possibility space.
+        board_to_solve = filter_by_possibility_space(filled_board_space, board_to_solve)
+        # Update the possibility space.
+        filled_board_space = fill_board_space(board_to_solve)
+
+        # Resolve empty cells based on unique possibilities.
+        empty_cells_count = 0
+        for r in range(9):
+            row_board_space = dict()
+            for c in range(9):
+                if board_to_solve[r][c] == 0:
+                    # Empty cell in puzzle.
+                    empty_cells_count += 1
+                    row_board_space[c] = filled_board_space[(r, c)]
+                    if len(filled_board_space[(r, c)]) == 1:
+                        # Only one possible value for this empty cell.
+                        board_to_solve[r][c] = filled_board_space[(r, c)][0]
+                        empty_cells_count -= 1
+        print(f"Iteration {iters} , {empty_cells_count} empty cells.")
+
+        iters += 1
+        if empty_cells_count == 0:
+            iters = max_iterations
+            print("Puzzle solved")
+    return board_to_solve
+
+
+def fill_board_space(board_to_solve: List[List[int]]) -> Dict:
+    # For each cell, fill in the possibility space according to other cells in the same row, column and square.
     row_possibility_space = dict()
     column_possibility_space = dict()
     for k in range(9):
@@ -156,67 +196,115 @@ def solve_board(board: List[List[int]]) -> List[List[int]]:
         for ck in range(9):
             square_possibility_space[rk, ck] = list()
 
-    iters = 0
-    max_iterations = 6
-    # TODO: Priority: High: handle max iterations.
+    board_space = dict()
+    for rk in range(9):
+        for ck in range(9):
+            board_space[rk, ck] = list()
 
-    while iters < max_iterations:
-        print(f"Iteration {iters}")
-
-        for r in range(9):
-            existing_row_vals = remove_values_from_list(board[r][:], 0)
-            row_possibility_space[r] = [_ for _ in range(1, 10) if _ not in existing_row_vals]
+    for r in range(9):
+        existing_row_vals = remove_values_from_list(board_to_solve[r][:], 0)
+        row_possibility_space[r] = [_ for _ in range(1, 10) if _ not in existing_row_vals]
         for c in range(9):
-            column = [board[i][c] for i in range(9)]
+            column = [board_to_solve[i][c] for i in range(9)]
             existing_col_vals = remove_values_from_list(column, 0)
             column_possibility_space[c] = [_ for _ in range(1, 10) if _ not in existing_col_vals]
 
-        empty_cells_count = 0
-        for r in range(9):
-            for c in range(9):
-                if puzzle[r][c] == 0:
-                    empty_cells_count += 1
-                    square_vals = select_square((r, c), board)
-                    existing_square_vals = remove_values_from_list(square_vals, 0)
-                    square_possibility_space[(r, c)] = [_ for _ in range(1, 10) if _ not in existing_square_vals]
+            if board_to_solve[r][c] == 0:
+                # fill in board_space according to row, column and square.
+                square_vals = select_square((r, c), board_to_solve)
+                existing_square_vals = remove_values_from_list(square_vals, 0)
+                square_possibility_space[(r, c)] = [_ for _ in range(1, 10) if _ not in existing_square_vals]
 
-                    common_elements = intersection_lists(row_possibility_space[r], column_possibility_space[c],
+                board_space[(r, c)] = intersection_lists(row_possibility_space[r], column_possibility_space[c],
                                                          square_possibility_space[(r, c)])
+    return board_space
 
-                    if len(common_elements) == 1:
-                        print(f"we uniquely identified the value at {r}, {c} = {common_elements[0]}")
-                        board[r][c] = common_elements[0]
-                        empty_cells_count -= 1
 
-        print(f"empty cells count {empty_cells_count}")
-        iters += 1
-        if empty_cells_count == 0:
-            iters = max_iterations
-            print("puzzle solved")
-    return board
+def filter_by_possibility_space(possibility_space: Dict, board_to_solve: List[List[int]]) -> List[List[int]]:
+    for r in range(9):
+        # For each row, get the possibility space for each cell.
+        row_space = [possibility_space[(r, c_)] for c_ in range(9)]
+        # For each possibility (1 to 9), map which cell index can possibly hold it.
+        mapping = dict([(_, []) for _ in range(1, 10)])
+        for index, item in enumerate(row_space):
+            if len(item) != 0:
+                # If length is not 0, cell is empty.
+                for k in item:
+                    # for each item in the possibility space of the empty cell, add it to the map.
+                    mapping[k].append(index)
+        # Go through the map, if a value appears only once in the map, it can appear only in that cell of the row.
+        for key, value in mapping.items():
+            if len(value) == 1:
+                board_to_solve[r][value[0]] = key
+
+    # Same procedure for columns.
+    for c in range(9):
+        column_space = [possibility_space[(r_, c)] for r_ in range(9)]
+
+        mapping = dict([(_, []) for _ in range(1, 10)])
+        for index, item in enumerate(column_space):
+            if len(item) != 0:
+                for k in item:
+                    mapping[k].append(index)
+        for key, value in mapping.items():
+            if len(value) == 1:
+                board_to_solve[value[0]][c] = key
+
+    # Same procedure for squares.
+    for r in [0, 3, 6]:
+        for c in [0, 3, 6]:
+            square_space = [[possibility_space[(r + rx, c_)] for c_ in range(c, c + 3)] for rx in range(3)]
+
+            mapping = dict([(_, []) for _ in range(1, 10)])
+            for i_rr, rr in enumerate(square_space):
+                for index, item in enumerate(rr):
+                    if len(item) != 0:
+                        for k in item:
+                            mapping[k].append([i_rr + r, index + c])
+            for key, value in mapping.items():
+                if len(value) == 1:
+                    board_to_solve[value[0][0]][value[0][1]] = key
+    return board_to_solve
 
 
 if __name__ == '__main__':
-    input_file = os.path.abspath("puzzles/puzzle_0001.txt")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("-i", "--input", help="input file path", type=str, required=True)
+    ap.add_argument("-n", "--iterations", help="number of iterations", type=int, required=True)
+    ap.add_argument("-o", "--output", help="output file path", type=str, required=True)
+
+    args = ap.parse_args()
+    input_file = args.input
+    num_iters = args.iterations
+    output_file = args.output
 
     if not os.path.isfile(input_file):
         fnf_error = f"File {input_file} not found"
         raise FileNotFoundError(fnf_error)
 
-    # TODO: Priority: medium: implement IO checks on output file path.
-    output_file = os.path.abspath("puzzles_solved/puzzle_0001_solved.txt")
+    output_path_split = os.path.split(output_file)
+    if not os.path.isdir(output_path_split[0]):
+        dir_err = f"Output directory {output_path_split} not found"
+        raise NotADirectoryError(dir_err)
 
+    # Read in the puzzle and validate it for consistency (no repeated value in row, column and square).
     puzzle = read_puzzle(input_file)
-
     is_validated = validate_puzzle(puzzle)
 
     if not is_validated:
         bad_puzzle_error = f"File {input_file} contains a bad puzzle."
         raise RuntimeError(bad_puzzle_error)
 
-    solved_puzzle = solve_board(puzzle)
+    # Copy the puzzle and solve it.
+    puzzle_to_solve = copy.deepcopy(puzzle)
+    solved_puzzle = solve_board(puzzle_to_solve, num_iters)
+    # Verify that the solved puzzle is consistent.
+    is_validated = validate_puzzle(solved_puzzle)
+    if not is_validated:
+        bad_solve_error = f"Solved puzzle is wrong."
+        raise RuntimeError(bad_solve_error)
 
     # TODO: Priority: low: re-factor output file writing.
     with open(output_file, 'w') as f:
         for solved_row in solved_puzzle:
-            f.write(str(solved_row)+'\n')
+            f.write(str(solved_row) + '\n')
